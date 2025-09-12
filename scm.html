@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Logistics Command Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    
+    <!-- FIXED: Added Leaflet.js for a REAL map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .modal-overlay { transition: opacity 0.3s ease-in-out; }
+        .modal-content { transition: transform 0.3s ease-in-out; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        .input-field {
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+        }
+        .input-field::placeholder { color: rgba(255, 255, 255, 0.5); }
+        /* Leaflet fullscreen */
+        #fleetMap { height: 100%; width: 100%; }
+        .leaflet-popup-content-wrapper { border-radius: 8px; }
+        .leaflet-popup-content { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-100 antialiased">
+
+    <!-- =========== LOGIN VIEW =========== -->
+    <div id="loginView" class="min-h-screen flex items-center justify-center bg-gray-900 p-4" style="background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), url('https://images.unsplash.com/photo-1577974338399-52d92a11b3b1?q=80&w=2070'); background-size: cover;">
+        <div class="w-full max-w-sm">
+            <div class="bg-white/10 backdrop-blur-sm rounded-2xl shadow-2xl p-8 text-center border border-white/20">
+                <i class="fas fa-truck-fast text-5xl text-white mb-4"></i>
+                <h1 class="text-3xl font-bold text-white mb-2">Logistics Command Center</h1>
+                <p class="text-gray-300 mb-8">Đăng nhập để tiếp tục</p>
+                <form id="loginForm">
+                    <div class="space-y-4 text-left">
+                        <div>
+                            <label for="username" class="text-sm font-bold text-gray-300">Tên đăng nhập</label>
+                            <input type="text" id="username" name="username" placeholder="Nhập tên đăng nhập" class="w-full mt-1 p-3 rounded-lg input-field focus:outline-none focus:ring-2 focus:ring-blue-400 transition">
+                        </div>
+                        <div>
+                            <label for="password" class="text-sm font-bold text-gray-300">Mật khẩu</label>
+                            <input type="password" id="password" name="password" placeholder="••••••••" class="w-full mt-1 p-3 rounded-lg input-field focus:outline-none focus:ring-2 focus:ring-blue-400 transition">
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded-lg text-lg transition duration-300 transform hover:-translate-y-1 shadow-lg mt-8">
+                        Đăng Nhập
+                    </button>
+                    <p id="loginError" class="text-red-400 text-sm mt-4 h-5"></p>
+                </form>
+            </div>
+             <div class="mt-6 p-4 bg-black/20 rounded-lg border border-white/20 text-left text-sm text-gray-300">
+                <h4 class="font-semibold mb-2 text-white">Tài khoản mẫu:</h4>
+                <p><strong>Quản Lý:</strong> <span class="font-mono">admin</span> / <span class="font-mono">123</span></p>
+                <p><strong>Tài Xế:</strong> <span class="font-mono">driver01</span> / <span class="font-mono">123</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- =========== MAIN APPLICATION VIEW (Admin & Driver) =========== -->
+    <div id="appView" class="hidden">
+        <!-- Admin View -->
+        <div id="adminView" class="hidden h-screen w-screen flex">
+            <aside class="w-64 bg-gray-800 text-gray-300 flex flex-col">
+                <div class="p-4 border-b border-gray-700 flex items-center gap-3">
+                    <i class="fas fa-truck-fast text-3xl text-white"></i>
+                    <h1 class="text-xl font-bold text-white">LCC</h1>
+                </div>
+                <nav class="flex-1 p-4 space-y-2">
+                    <a href="#" class="nav-item flex items-center p-3 rounded-lg transition-colors" data-target="dashboard">
+                        <i class="fas fa-tachometer-alt fa-fw w-6 text-center mr-3"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="#" class="nav-item flex items-center p-3 rounded-lg transition-colors" data-target="fleet">
+                        <i class="fas fa-map-location-dot fa-fw w-6 text-center mr-3"></i>
+                        <span>Giám Sát Đội Xe</span>
+                    </a>
+                    <a href="#" class="nav-item flex items-center p-3 rounded-lg transition-colors" data-target="shipments">
+                        <i class="fas fa-box fa-fw w-6 text-center mr-3"></i>
+                        <span>Quản Lý Lô Hàng</span>
+                    </a>
+                    <a href="#" class="nav-item flex items-center p-3 rounded-lg transition-colors" data-target="ai">
+                        <i class="fas fa-microchip fa-fw w-6 text-center mr-3"></i>
+                        <span>Phân Tích AI</span>
+                    </a>
+                </nav>
+                <div class="p-4 border-t border-gray-700">
+                    <div class="flex items-center gap-3">
+                        <img src="https://placehold.co/40x40/64748b/ffffff?text=A" class="rounded-full">
+                        <div>
+                            <p id="adminUsername" class="font-semibold text-white">Admin</p>
+                            <a href="#" onclick="app.logout()" class="text-sm text-red-400 hover:text-red-300">Đăng xuất</a>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+            <main class="flex-1 bg-slate-100 overflow-y-auto">
+                <!-- Admin Pages will be injected here -->
+            </main>
+        </div>
+
+        <!-- DRIVER VIEW - A NORMAL, FULL-SCREEN RESPONSIVE PAGE -->
+        <div id="driverView" class="hidden">
+            <div class="min-h-screen flex flex-col">
+                <header class="bg-gray-800 text-white shadow-md">
+                    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+                        <div class="flex items-center justify-between h-16">
+                            <div class="flex items-center">
+                               <i class="fas fa-truck text-2xl mr-3"></i>
+                               <span class="font-semibold text-xl">Driver Portal</span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                               <span id="driverUsername" class="font-medium"></span>
+                                <a href="#" onclick="app.logout()" class="text-sm text-red-400 hover:text-red-300 flex items-center gap-1">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    <span>Đăng xuất</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+                <main class="flex-1 bg-gray-100">
+                    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        <div id="driverTaskContent" class="bg-white p-6 rounded-xl shadow-lg border max-w-2xl mx-auto">
+                            <!-- Driver task details will be rendered here -->
+                        </div>
+                        <div class="mt-6 max-w-2xl mx-auto">
+                             <button id="driverActionButton" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-4 rounded-xl text-lg transition duration-300 shadow-lg flex items-center justify-center gap-2">
+                                <!-- Button content will be rendered here -->
+                            </button>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+    
+    <!-- MODAL -->
+    <div id="modalContainer" class="fixed inset-0 z-50 hidden">
+        <!-- Overlay and Content will be added by JS -->
+    </div>
+
+    <script>
+    class LogisticsApp {
+        constructor() {
+            this.state = {
+                currentUser: null,
+                activeAdminPage: 'dashboard',
+                simulation: { running: false, interval: null, timer: 0 },
+                fleet: [],
+                shipments: [],
+                driverTask: null,
+                map: null, // To hold the Leaflet map instance
+                vehicleMarkers: {}, // To hold vehicle marker layers
+            };
+            this.mockUsers = {
+                'admin': { password: '123', role: 'admin' },
+                'driver01': { password: '123', role: 'driver' },
+            };
+            
+            // FIXED: Added MULTIPLE locations with real-world coordinates
+            this.locations = {
+                'WH-HCM': { name: 'Tổng Kho Miền Nam', coords: [10.8231, 106.6297], type: 'warehouse' },
+                'WH-HN': { name: 'Tổng Kho Miền Bắc', coords: [21.0285, 105.8542], type: 'warehouse' },
+                'NPP-DN': { name: 'NPP Đà Nẵng', coords: [16.0545, 108.2022], type: 'distributor' },
+                'NPP-CT': { name: 'NPP Cần Thơ', coords: [10.0452, 105.7469], type: 'distributor' },
+                'NPP-HP': { name: 'NPP Hải Phòng', coords: [20.8436, 106.6800], type: 'distributor' }
+            };
+            this.init();
+        }
+
+        init() {
+            document.addEventListener('DOMContentLoaded', () => {
+                this.cacheDOMElements();
+                this.attachEventListeners();
+                this.loadInitialData();
+                this.render();
+            });
+        }
+        
+        loadInitialData() {
+            this.state.fleet = [
+                { id: '70A-122.11', route: ['WH-HCM', 'NPP-CT'], progress: 0.1, status: 'on_route', hasAlert: false },
+                { id: '71B-345.67', route: ['WH-HN', 'NPP-DN'], progress: 0.4, status: 'on_route', hasAlert: false },
+                { id: '72C-888.99', route: ['WH-HN', 'NPP-HP'], progress: 0.65, status: 'stopped', hasAlert: true },
+                { id: '73D-101.01', route: ['WH-HCM', 'NPP-DN'], progress: 0.9, status: 'at_warehouse', hasAlert: false },
+                { id: '74E-222.33', route: ['WH-HCM', 'NPP-CT'], progress: 1.0, status: 'delivered', hasAlert: false },
+            ];
+            this.state.shipments = this.state.fleet.map(v => ({
+                id: `SHIP-${v.id.slice(-3)}`, driver: v.id, status: v.status, 
+                destination: this.locations[v.route[1]].name, lastUpdate: "08:15"
+            }));
+            this.state.driverTask = {
+                shipmentId: 'SHIP-11',
+                destination: 'NPP Cần Thơ',
+                eta: '17:30',
+                status: 'on_route'
+            };
+        }
+
+        cacheDOMElements() {
+            this.dom = {
+                loginView: document.getElementById('loginView'),
+                appView: document.getElementById('appView'),
+                adminView: document.getElementById('adminView'),
+                driverView: document.getElementById('driverView'),
+                adminMainContent: document.querySelector('#adminView main'),
+                navItems: document.querySelectorAll('.nav-item'),
+                modalContainer: document.getElementById('modalContainer'),
+                loginForm: document.getElementById('loginForm'),
+                loginError: document.getElementById('loginError'),
+                adminUsername: document.getElementById('adminUsername'),
+                driverUsername: document.getElementById('driverUsername'),
+                driverTaskContent: document.getElementById('driverTaskContent'),
+                driverActionButton: document.getElementById('driverActionButton'),
+            };
+        }
+
+        attachEventListeners() {
+            this.dom.loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+            this.dom.navItems.forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.state.activeAdminPage = e.target.closest('.nav-item').dataset.target;
+                    this.render();
+                });
+            });
+            this.dom.driverActionButton.addEventListener('click', () => this.handleDriverAction());
+        }
+        
+        render() {
+            if (!this.state.currentUser) {
+                this.dom.loginView.style.display = 'flex';
+                this.dom.appView.style.display = 'none';
+            } else {
+                this.dom.loginView.style.display = 'none';
+                this.dom.appView.style.display = 'block';
+                if (this.state.currentUser.role === 'admin') {
+                    this.dom.adminView.style.display = 'flex';
+                    this.dom.driverView.style.display = 'none';
+                    this.dom.adminUsername.textContent = this.state.currentUser.name;
+                    this.renderAdminPage();
+                } else {
+                    this.dom.adminView.style.display = 'none';
+                    this.dom.driverView.style.display = 'block';
+                    this.dom.driverUsername.textContent = this.state.currentUser.name;
+                    this.renderDriverPage();
+                }
+            }
+        }
+        
+        renderAdminPage() {
+            this.dom.navItems.forEach(item => {
+                const navItem = item.closest('.nav-item');
+                const isActive = navItem.dataset.target === this.state.activeAdminPage;
+                navItem.classList.toggle('bg-blue-600', isActive);
+                navItem.classList.toggle('text-white', isActive);
+            });
+            let content = '';
+            switch (this.state.activeAdminPage) {
+                case 'dashboard': content = this.getDashboardHTML(); break;
+                case 'fleet': content = this.getFleetHTML(); break;
+                case 'shipments': content = this.getShipmentsHTML(); break;
+                case 'ai': content = this.getAIHTML(); break;
+            }
+            this.dom.adminMainContent.innerHTML = content;
+            if (this.state.activeAdminPage === 'fleet') {
+                // Delay map initialization slightly to ensure DOM is ready
+                setTimeout(() => this.initMap(), 10); 
+                document.getElementById('simulationBtn').addEventListener('click', () => this.toggleSimulation());
+            } else if (this.state.activeAdminPage === 'ai'){
+                 document.getElementById('aiAnalysisBtn').addEventListener('click', (e) => this.runAIAnalysis(e.target));
+            }
+        }
+        
+        renderDriverPage() {
+            const task = this.state.driverTask;
+            const statusInfo = {
+                on_route: { text: 'Đang di chuyển', color: 'text-blue-600', icon: 'fa-circle-notch fa-spin' },
+                arrived: { text: 'Đã đến nơi', color: 'text-green-600', icon: 'fa-map-marker-alt' }
+            };
+            const currentStatus = statusInfo[task.status] || { text: 'N/A', color: 'text-gray-600', icon: 'fa-question-circle' };
+            this.dom.driverTaskContent.innerHTML = `
+                <div class="text-center mb-6">
+                    <p class="text-gray-500 text-lg">Mã Lô Hàng</p>
+                    <p class="font-mono text-4xl font-bold text-gray-800">${task.shipmentId}</p>
+                </div>
+                <div class="space-y-4">
+                    <div class="bg-slate-50 p-4 rounded-lg border">
+                        <p class="text-sm font-semibold text-gray-500">NHIỆM VỤ HIỆN TẠI</p>
+                        <p class="text-xl font-bold text-gray-800">Lái xe tới: ${task.destination}</p>
+                        <p class="text-base text-gray-600">Dự kiến đến: ${task.eta}</p>
+                    </div>
+                     <div class="bg-slate-50 p-4 rounded-lg border">
+                        <p class="text-sm font-semibold text-gray-500">TRẠNG THÁI</p>
+                        <p class="text-xl font-bold ${currentStatus.color} flex items-center justify-center">
+                            <i class="fas ${currentStatus.icon} mr-2"></i>${currentStatus.text}
+                        </p>
+                    </div>
+                </div>`;
+
+            if (task.status === 'on_route') {
+                 this.dom.driverActionButton.innerHTML = `<i class="fas fa-check-circle mr-2"></i> Xác Nhận Đã Đến Nơi`;
+            } else {
+                 this.dom.driverActionButton.innerHTML = `<i class="fas fa-camera mr-2"></i> Hoàn Thành & Chụp Ảnh Biên Nhận`;
+            }
+        }
+
+        handleDriverAction() {
+            if (this.state.driverTask.status === 'on_route') {
+                this.state.driverTask.status = 'arrived';
+                this.renderDriverPage();
+            } else {
+                this.openPhotoModal();
+            }
+        }
+
+        getDashboardHTML() {
+            const onRoute = this.state.fleet.filter(v => v.status === 'on_route').length;
+            const alerts = this.state.fleet.filter(v => v.hasAlert).length;
+            const deliveries = this.state.fleet.filter(s => s.status === 'delivered').length;
+            return `
+                <div class="p-8">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-6">Dashboard</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-xl shadow-md border"><p class="text-sm text-gray-500">Xe đang đi</p><p class="text-4xl font-bold text-blue-600">${onRoute}</p></div>
+                        <div class="bg-white p-6 rounded-xl shadow-md border"><p class="text-sm text-gray-500">Cảnh báo</p><p class="text-4xl font-bold ${alerts > 0 ? 'text-red-500' : 'text-gray-800'}">${alerts}</p></div>
+                        <div class="bg-white p-6 rounded-xl shadow-md border"><p class="text-sm text-gray-500">Đã giao hôm nay</p><p class="text-4xl font-bold text-green-600">${deliveries}</p></div>
+                    </div>
+                     <div class="mt-8 bg-white p-6 rounded-xl shadow-md border">
+                        <h3 class="font-bold text-xl mb-4">Hoạt động Gần đây</h3>
+                        <div id="activityLog" class="h-80 overflow-y-auto space-y-3 pr-2">
+                             ${this.getSampleActivityLogs()}
+                        </div>
+                    </div>
+                </div>`;
+        }
+        getSampleActivityLogs() {
+            return `
+                <div class="flex items-start gap-3"><i class="fas fa-exclamation-triangle text-red-500 mt-1"></i><div><p class="text-sm">Cảnh báo: Xe 72C-888.99 dừng lại bất thường!</p><p class="text-xs text-gray-400">09:01</p></div></div>
+                <div class="flex items-start gap-3"><i class="fas fa-truck-arrow-right text-blue-500 mt-1"></i><div><p class="text-sm">Xe 71B-345.67 bắt đầu lộ trình.</p><p class="text-xs text-gray-400">08:20</p></div></div>
+                <div class="flex items-start gap-3"><i class="fas fa-check-circle text-green-500 mt-1"></i><div><p class="text-sm">Xe 74E-222.33 đã hoàn thành giao hàng.</p><p class="text-xs text-gray-400">07:55</p></div></div>`;
+        }
+        getFleetHTML() {
+            // FIXED: Replaced canvas with a div for the Leaflet map
+            return `
+                <div class="h-full w-full flex flex-col">
+                     <div class="p-4 bg-white/50 backdrop-blur-sm border-b z-10">
+                        <h2 class="text-xl font-bold text-gray-800">Giám Sát Đội Xe</h2>
+                    </div>
+                    <div class="flex-1 grid grid-cols-1 lg:grid-cols-4">
+                        <div class="lg:col-span-3 relative">
+                            <div id="fleetMap"></div>
+                        </div>
+                        <div class="bg-white p-4 overflow-y-auto">
+                            <h3 class="font-bold mb-4">Thông tin & Điều khiển</h3>
+                            <button id="simulationBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg mb-4">Bắt Đầu Giả Lập</button>
+                             <div id="vehicleStatusList" class="space-y-2"></div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+        getShipmentsHTML() {
+             let rows = this.state.shipments.map(s => {
+                const statusMap = {
+                    on_route: { text: 'Đang đi', class: 'bg-blue-100 text-blue-800' }, stopped: { text: 'Dừng', class: 'bg-red-100 text-red-800' },
+                    delivered: { text: 'Đã giao', class: 'bg-green-100 text-green-800' }, at_warehouse: { text: 'Tại kho', class: 'bg-yellow-100 text-yellow-800' }
+                };
+                const statusInfo = statusMap[s.status] || { text: 'N/A', class: 'bg-gray-100 text-gray-800' };
+                return `
+                <tr class="hover:bg-gray-50">
+                    <td class="p-3 font-mono text-sm">${s.id}</td><td class="p-3">${s.driver}</td>
+                    <td class="p-3"><span class="px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.class}">${statusInfo.text}</span></td>
+                    <td class="p-3">${s.destination}</td><td class="p-3">${s.lastUpdate}</td>
+                </tr>`}).join('');
+            return `
+                <div class="p-8">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-6">Quản Lý Lô Hàng</h2>
+                    <div class="bg-white rounded-xl shadow-md border overflow-hidden">
+                        <table class="min-w-full text-left text-sm">
+                            <thead class="bg-gray-50 border-b"><tr class="text-gray-600">
+                                <th class="p-3 font-semibold">Mã Lô Hàng</th><th class="p-3 font-semibold">Tài Xế</th>
+                                <th class="p-3 font-semibold">Trạng Thái</th><th class="p-3 font-semibold">Điểm Đến</th>
+                                <th class="p-3 font-semibold">Cập nhật lúc</th>
+                            </tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+        }
+        getAIHTML() {
+            return `
+                 <div class="p-8">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-2">Trợ Lý Phân Tích AI</h2>
+                    <p class="text-gray-600 mb-6">Phân tích tự động dữ liệu vận hành để tìm kiếm cơ hội tối ưu.</p>
+                     <button id="aiAnalysisBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg mb-6 transition duration-300 flex items-center gap-2">
+                        <i class="fas fa-play-circle"></i> Chạy Phân Tích
+                     </button>
+                    <div id="aiResultsContainer" class="space-y-4"><p class="text-gray-500">Kết quả phân tích sẽ xuất hiện ở đây.</p></div>
+                </div>`;
+        }
+        handleLogin(event) {
+            event.preventDefault();
+            const username = event.target.username.value;
+            const password = event.target.password.value;
+            const user = this.mockUsers[username];
+            if (user && user.password === password) {
+                this.state.currentUser = { name: username, role: user.role };
+                this.dom.loginError.textContent = ''; this.render();
+            } else { this.dom.loginError.textContent = 'Tên đăng nhập hoặc mật khẩu không đúng.'; }
+        }
+        logout() {
+            if (this.state.simulation.running) this.toggleSimulation();
+            this.state.currentUser = null; 
+            if (this.state.map) {
+                this.state.map.remove();
+                this.state.map = null;
+            }
+            this.render();
+        }
+        
+        // FIXED: New method to initialize the Leaflet map
+        initMap() {
+            if (this.state.map) {
+                this.state.map.remove();
+            }
+            const mapElement = document.getElementById('fleetMap');
+            if (!mapElement) return;
+
+            this.state.map = L.map('fleetMap').setView([15.9, 107.8], 6); // Centered on Vietnam
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(this.state.map);
+
+            // Add location markers
+            for (const id in this.locations) {
+                const loc = this.locations[id];
+                const iconHtml = `<div class="p-1 rounded-full ${loc.type === 'warehouse' ? 'bg-sky-500' : 'bg-green-500'} border-2 border-white shadow-lg"><i class="fas ${loc.type === 'warehouse' ? 'fa-warehouse' : 'fa-store'} text-white"></i></div>`;
+                const customIcon = L.divIcon({ html: iconHtml, className: 'flex items-center justify-center', iconSize: [24, 24] });
+                L.marker(loc.coords, { icon: customIcon }).addTo(this.state.map)
+                    .bindPopup(`<b>${loc.name}</b>`);
+            }
+            
+            // Draw initial routes and vehicles
+            this.updateMapState();
+        }
+
+        toggleSimulation() {
+            const btn = document.getElementById('simulationBtn');
+            if (this.state.simulation.running) {
+                clearInterval(this.state.simulation.interval);
+                this.state.simulation.running = false;
+                btn.innerHTML = 'Bắt Đầu Giả Lập'; btn.classList.replace('bg-red-600', 'bg-blue-600');
+            } else {
+                this.state.simulation.running = true;
+                this.state.simulation.interval = setInterval(() => this.simulationLoop(), 100);
+                btn.innerHTML = 'Dừng Giả Lập'; btn.classList.replace('bg-blue-600', 'bg-red-600');
+            }
+        }
+        simulationLoop() {
+            this.state.simulation.timer++;
+            this.state.fleet.forEach(v => {
+                if(v.status === 'on_route') { v.progress += 0.005; }
+                if(v.progress >= 1) { v.progress = 1; v.status = 'delivered'; }
+                if(v.id === '72C-888.99' && this.state.simulation.timer > 50 && this.state.simulation.timer < 150) {
+                     v.status = 'stopped'; v.hasAlert = true;
+                } else if(v.id === '72C-888.99' && v.progress < 1) { v.status = 'on_route'; v.hasAlert = false; }
+            });
+            this.updateMapState();
+        }
+        
+        // FIXED: New method to update the map state (vehicles and list)
+        updateMapState() {
+            if (!this.state.map) return;
+            const listEl = document.getElementById('vehicleStatusList');
+            if (!listEl) return;
+            
+            let listHTML = '';
+
+            this.state.fleet.forEach(v => {
+                // Update vehicle marker on map
+                const startCoords = this.locations[v.route[0]].coords;
+                const endCoords = this.locations[v.route[1]].coords;
+                const lat = startCoords[0] + (endCoords[0] - startCoords[0]) * v.progress;
+                const lng = startCoords[1] + (endCoords[1] - startCoords[1]) * v.progress;
+                
+                const iconHtml = `<div class="p-1 rounded-full ${v.hasAlert ? 'bg-red-500' : 'bg-blue-500'} border-2 border-white shadow-lg"><i class="fas fa-truck text-white"></i></div>`;
+                const customIcon = L.divIcon({ html: iconHtml, className: 'flex items-center justify-center', iconSize: [24, 24] });
+                
+                if (this.state.vehicleMarkers[v.id]) {
+                    this.state.vehicleMarkers[v.id].setLatLng([lat, lng]).setIcon(customIcon);
+                } else {
+                    this.state.vehicleMarkers[v.id] = L.marker([lat, lng], { icon: customIcon }).addTo(this.state.map);
+                }
+                this.state.vehicleMarkers[v.id].bindPopup(`<b>Xe: ${v.id}</b><br>Trạng thái: ${v.status}`);
+
+                // Update vehicle status list
+                const statusMap = {
+                    on_route: { text: 'Đang đi', icon: 'fa-truck-fast', color: 'blue-500' },
+                    stopped: { text: 'Dừng bất thường', icon: 'fa-triangle-exclamation', color: 'red-500' },
+                    at_warehouse: { text: 'Tại kho', icon: 'fa-warehouse', color: 'yellow-500' },
+                    delivered: { text: 'Đã giao', icon: 'fa-check-circle', color: 'green-500' }
+                };
+                const info = statusMap[v.status];
+                listHTML += `
+                    <div class="p-3 rounded-lg ${v.hasAlert ? 'bg-red-100 border border-red-300' : 'bg-slate-50 border'}">
+                        <p class="font-bold text-gray-800">${v.id}</p>
+                        <p class="text-sm text-${info.color}"><i class="fas ${info.icon} mr-2"></i>${info.text}</p>
+                    </div>`;
+            });
+            listEl.innerHTML = listHTML;
+        }
+
+        runAIAnalysis(button) {
+            button.disabled = true;
+            button.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Đang phân tích...`;
+            const container = document.getElementById('aiResultsContainer');
+            setTimeout(() => {
+                container.innerHTML = `
+                    <div class="bg-white p-4 rounded-lg border shadow-sm">
+                        <h4 class="font-bold text-blue-600"><i class="fas fa-lightbulb mr-2"></i>Đề xuất tối ưu hóa</h4>
+                        <p>Tuyến đường cho xe <strong>71B-345.67</strong> có thể rút ngắn 15 phút bằng cách đi qua QL22 thay vì đường Xuyên Á.</p>
+                    </div>
+                    <div class="bg-white p-4 rounded-lg border shadow-sm">
+                        <h4 class="font-bold text-red-600"><i class="fas fa-triangle-exclamation mr-2"></i>Cảnh báo tiềm ẩn</h4>
+                        <p>Xe <strong>72C-888.99</strong> có thời gian dừng bất thường cao hơn 30% so với trung bình. Cần kiểm tra tình trạng kỹ thuật hoặc tài xế.</p>
+                    </div>`;
+                button.disabled = false;
+                button.innerHTML = `<i class="fas fa-play-circle"></i> Chạy Lại Phân Tích`;
+            }, 2000);
+        }
+        openPhotoModal() {
+            const modalContent = `
+                <div class="bg-black w-full max-w-lg mx-auto rounded-lg text-white p-4 text-center">
+                    <h3 class="text-xl font-bold mb-4">Chụp Ảnh Biên Nhận</h3>
+                    <div class="bg-gray-700 h-64 flex items-center justify-center rounded-md mb-4 text-gray-400">
+                        <i class="fas fa-camera text-6xl"></i>
+                    </div>
+                    <div class="flex gap-4">
+                        <button onclick="app.closeModal()" class="w-full bg-gray-600 hover:bg-gray-500 py-2 rounded">Hủy</button>
+                        <button onclick="app.confirmPhotoUpload()" class="w-full bg-blue-600 hover:bg-blue-500 py-2 rounded">Xác nhận</button>
+                    </div>
+                </div>`;
+            this.showModal(modalContent);
+        }
+        confirmPhotoUpload() {
+            this.closeModal();
+            this.showModal(`<div class="bg-white p-6 rounded-lg text-center"><i class="fas fa-check-circle text-green-500 text-4xl mb-4"></i><p>Tải ảnh lên thành công!</p></div>`);
+            setTimeout(() => this.closeModal(), 2000);
+            this.state.driverTask.status = 'delivered';
+            this.renderDriverPage();
+        }
+        showModal(contentHTML) {
+            this.dom.modalContainer.innerHTML = `
+                <div class="modal-overlay fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4">
+                    <div class="modal-content transform scale-95">${contentHTML}</div>
+                </div>`;
+            this.dom.modalContainer.classList.remove('hidden');
+            setTimeout(() => {
+                const overlay = this.dom.modalContainer.querySelector('.modal-overlay');
+                const content = this.dom.modalContainer.querySelector('.modal-content');
+                if (overlay) overlay.classList.add('opacity-100');
+                if (content) content.classList.add('scale-100');
+            }, 10);
+        }
+        closeModal() {
+            const overlay = this.dom.modalContainer.querySelector('.modal-overlay');
+            if (overlay) {
+                overlay.classList.remove('opacity-100');
+                setTimeout(() => this.dom.modalContainer.classList.add('hidden'), 300);
+            } else {
+                 this.dom.modalContainer.classList.add('hidden');
+            }
+        }
+    }
+
+    const app = new LogisticsApp();
+    </script>
+</body>
+</html>
+
