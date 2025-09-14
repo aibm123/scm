@@ -74,6 +74,10 @@
                     <h1 class="text-xl font-bold text-white">LCC</h1>
                 </div>
                 <nav class="flex-1 p-4 space-y-2">
+                    <a href="#" class="nav-item flex items-center p-3 rounded-lg transition-colors" data-target="chatbot">
+                        <i class="fas fa-comments fa-fw w-6 text-center mr-3"></i>
+                        <span>Chatbot</span>
+                    </a>
                     <a href="#" class="nav-item flex items-center p-3 rounded-lg transition-colors" data-target="dashboard">
                         <i class="fas fa-tachometer-alt fa-fw w-6 text-center mr-3"></i>
                         <span>Dashboard</span>
@@ -85,10 +89,6 @@
                     <a href="#" class="nav-item flex items-center p-3 rounded-lg transition-colors" data-target="shipments">
                         <i class="fas fa-box fa-fw w-6 text-center mr-3"></i>
                         <span>Quản Lý Lô Hàng</span>
-                    </a>
-                    <a href="#" class="nav-item flex items-center p-3 rounded-lg transition-colors" data-target="ai">
-                        <i class="fas fa-microchip fa-fw w-6 text-center mr-3"></i>
-                        <span>Phân Tích AI</span>
                     </a>
                 </nav>
                 <div class="p-4 border-t border-gray-700">
@@ -152,7 +152,7 @@
         constructor() {
             this.state = {
                 currentUser: null,
-                activeAdminPage: 'dashboard',
+                activeAdminPage: 'chatbot',
                 simulation: { running: false, interval: null, timer: 0 },
                 locations: {},
                 fleet: [],
@@ -160,6 +160,7 @@
                 driverTask: null,
                 map: null, 
                 vehicleMarkers: {},
+                threadId: null, 
             };
             
             this.apiConfig = {
@@ -318,17 +319,19 @@
             });
             let content = '';
             switch (this.state.activeAdminPage) {
+                case 'chatbot': content = this.getChatbotHTML(); break;
                 case 'dashboard': content = this.getDashboardHTML(); break;
                 case 'fleet': content = this.getFleetHTML(); break;
                 case 'shipments': content = this.getShipmentsHTML(); break;
-                case 'ai': content = this.getAIHTML(); break;
             }
             this.dom.adminMainContent.innerHTML = content;
+
             if (this.state.activeAdminPage === 'fleet') {
                 setTimeout(() => this.initMap(), 10); 
                 document.getElementById('simulationBtn').addEventListener('click', () => this.toggleSimulation());
-            } else if (this.state.activeAdminPage === 'ai'){
-                 document.getElementById('aiAnalysisBtn').addEventListener('click', (e) => this.runAIAnalysis(e.target));
+            } else if (this.state.activeAdminPage === 'chatbot') {
+                const chatForm = document.getElementById('chatForm');
+                if(chatForm) chatForm.addEventListener('submit', (e) => this.handleChatSubmit(e));
             }
         }
         
@@ -397,9 +400,24 @@
                         <div class="bg-white p-6 rounded-xl shadow-md border"><p class="text-sm text-gray-500">Cảnh báo</p><p class="text-4xl font-bold ${alerts > 0 ? 'text-red-500' : 'text-gray-800'}">${alerts}</p></div>
                         <div class="bg-white p-6 rounded-xl shadow-md border"><p class="text-sm text-gray-500">Đã giao hôm nay</p><p class="text-4xl font-bold text-green-600">${deliveries}</p></div>
                     </div>
+
+                    <div class="mt-8">
+                        <h3 class="font-bold text-xl mb-4 text-gray-800">Đề Xuất từ AI</h3>
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-white p-4 rounded-lg border shadow-sm">
+                                <h4 class="font-bold text-blue-600"><i class="fas fa-lightbulb mr-2"></i>Đề xuất tối ưu hóa</h4>
+                                <p>Tuyến đường cho xe <strong>71B-345.67</strong> có thể rút ngắn 15 phút bằng cách đi qua QL22 thay vì đường Xuyên Á.</p>
+                            </div>
+                            <div class="bg-white p-4 rounded-lg border shadow-sm">
+                                <h4 class="font-bold text-red-600"><i class="fas fa-triangle-exclamation mr-2"></i>Cảnh báo tiềm ẩn</h4>
+                                <p>Xe <strong>72C-888.99</strong> có thời gian dừng bất thường cao hơn 30% so với trung bình. Cần kiểm tra tình trạng kỹ thuật hoặc tài xế.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
                      <div class="mt-8 bg-white p-6 rounded-xl shadow-md border">
                         <h3 class="font-bold text-xl mb-4">Hoạt động Gần đây</h3>
-                        <div id="activityLog" class="h-80 overflow-y-auto space-y-3 pr-2">
+                        <div id="activityLog" class="h-60 overflow-y-auto space-y-3 pr-2">
                             <p class="text-gray-500">Không có hoạt động nào gần đây.</p>
                         </div>
                     </div>
@@ -453,16 +471,33 @@
                     </div>
                 </div>`;
         }
-        getAIHTML() {
+
+        getChatbotHTML() {
             return `
-                 <div class="p-8">
-                    <h2 class="text-3xl font-bold text-gray-800 mb-2">Trợ Lý Phân Tích AI</h2>
-                    <p class="text-gray-600 mb-6">Phân tích tự động dữ liệu vận hành để tìm kiếm cơ hội tối ưu.</p>
-                     <button id="aiAnalysisBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg mb-6 transition duration-300 flex items-center gap-2">
-                        <i class="fas fa-play-circle"></i> Chạy Phân Tích
-                     </button>
-                    <div id="aiResultsContainer" class="space-y-4"><p class="text-gray-500">Kết quả phân tích sẽ xuất hiện ở đây.</p></div>
-                </div>`;
+                <div class="h-full w-full flex flex-col p-6">
+                    <h2 class="text-3xl font-bold text-gray-800 mb-4">Trợ lý AI Logistics</h2>
+                    <div class="flex-1 bg-white rounded-xl shadow-md border p-4 flex flex-col">
+                        <div id="chatHistory" class="flex-1 overflow-y-auto mb-4 space-y-4 pr-2">
+                            <div class="flex items-start gap-3">
+                                <div class="bg-blue-500 text-white rounded-full h-8 w-8 flex-shrink-0 flex items-center justify-center">
+                                    <i class="fas fa-robot"></i>
+                                </div>
+                                <div class="bg-slate-100 p-3 rounded-lg">
+                                    <p class="text-sm">Xin chào! Tôi có thể giúp gì cho bạn hôm nay? Hãy hỏi tôi về tình trạng xe hoặc các vấn đề vận hành.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border-t pt-4">
+                            <form id="chatForm" class="flex items-center gap-3">
+                                <input type="text" id="chatInput" placeholder="Nhập câu hỏi của bạn..." class="w-full p-3 rounded-lg border focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
         
         async handleLogin(event) {
@@ -483,6 +518,7 @@
                 if (user) {
                     const role = user.role ? user.role.value.toLowerCase() : 'driver';
                     this.state.currentUser = { id: user.id, name: user.email, role: role };
+                    this.state.threadId = `user_thread_${user.id}`; 
                     await this.loadApiData(); 
                     this.render();
                 } else {
@@ -512,6 +548,7 @@
             this.state.fleet = [];
             this.state.shipments = [];
             this.state.locations = {};
+            this.state.threadId = null; 
             this.render();
         }
         
@@ -598,24 +635,75 @@
             listEl.innerHTML = listHTML;
         }
 
-        runAIAnalysis(button) {
-            button.disabled = true;
-            button.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Đang phân tích...`;
-            const container = document.getElementById('aiResultsContainer');
-            setTimeout(() => {
-                container.innerHTML = `
-                    <div class="bg-white p-4 rounded-lg border shadow-sm">
-                        <h4 class="font-bold text-blue-600"><i class="fas fa-lightbulb mr-2"></i>Đề xuất tối ưu hóa</h4>
-                        <p>Tuyến đường cho xe <strong>71B-345.67</strong> có thể rút ngắn 15 phút bằng cách đi qua QL22 thay vì đường Xuyên Á.</p>
+        async handleChatSubmit(event) {
+            event.preventDefault();
+            const chatInput = document.getElementById('chatInput');
+            const chatHistory = document.getElementById('chatHistory');
+            const userMessage = chatInput.value.trim();
+            if (!userMessage) return;
+
+            chatHistory.innerHTML += `
+                <div class="flex items-start gap-3 justify-end">
+                    <div class="bg-slate-600 text-white p-3 rounded-lg">
+                        <p class="text-sm">${userMessage}</p>
                     </div>
-                    <div class="bg-white p-4 rounded-lg border shadow-sm">
-                        <h4 class="font-bold text-red-600"><i class="fas fa-triangle-exclamation mr-2"></i>Cảnh báo tiềm ẩn</h4>
-                        <p>Xe <strong>72C-888.99</strong> có thời gian dừng bất thường cao hơn 30% so với trung bình. Cần kiểm tra tình trạng kỹ thuật hoặc tài xế.</p>
-                    </div>`;
-                button.disabled = false;
-                button.innerHTML = `<i class="fas fa-play-circle"></i> Chạy Lại Phân Tích`;
-            }, 2000);
+                </div>`;
+            chatInput.value = '';
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            const typingId = `bot-typing-${Date.now()}`;
+            chatHistory.innerHTML += `
+                <div class="flex items-start gap-3" id="${typingId}">
+                    <div class="bg-blue-500 text-white rounded-full h-8 w-8 flex-shrink-0 flex items-center justify-center">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="bg-slate-100 p-3 rounded-lg">
+                        <div class="flex items-center gap-1.5">
+                            <div class="h-2 w-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                            <div class="h-2 w-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                            <div class="h-2 w-2 bg-slate-400 rounded-full animate-bounce"></div>
+                        </div>
+                    </div>
+                </div>`;
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+
+            try {
+                const webhookUrl = 'https://aps.aibm.space/webhook/scm1';
+                const payload = {
+                    task: 'chatbot',
+                    prompt: userMessage,
+                    email: this.state.currentUser.name,
+                    threadid: this.state.threadId,
+                    depart: 'Logistics'
+                };
+
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Lỗi HTTP! Trạng thái: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const botReply = data[0]?.output || "Xin lỗi, tôi không thể xử lý yêu cầu này.";
+
+                const typingElement = document.getElementById(typingId);
+                if (typingElement) {
+                    typingElement.querySelector('.bg-slate-100').innerHTML = `<p class="text-sm">${botReply}</p>`;
+                }
+
+            } catch (error) {
+                console.error('Lỗi API Chatbot:', error);
+                const typingElement = document.getElementById(typingId);
+                if (typingElement) {
+                    typingElement.querySelector('.bg-slate-100').innerHTML = `<p class="text-sm text-red-500">Lỗi: Không thể kết nối với trợ lý AI.</p>`;
+                }
+            }
         }
+
         openPhotoModal() {
             const modalContent = `
                 <div class="bg-black w-full max-w-lg mx-auto rounded-lg text-white p-4 text-center">
